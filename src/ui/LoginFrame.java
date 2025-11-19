@@ -33,7 +33,7 @@ public class LoginFrame extends JFrame {
         JLabel titJLabel = new JLabel("AQUAFLOW", SwingConstants.CENTER);
         titJLabel.setFont(new Font("Segoe UI", Font.BOLD, 48));
         titJLabel.setForeground(ThemeUtils.PRIMARY);
-        titJLabel.setBounds(0, 45, 500, 60); 
+        titJLabel.setBounds(0, 45, 500, 60);
         cardPanel.add(titJLabel);
 
         JLabel imageLabel = new JLabel();
@@ -45,30 +45,30 @@ public class LoginFrame extends JFrame {
             ImageIcon icon = new ImageIcon(sideImagePath);
             Image img = icon.getImage().getScaledInstance(500, 550, Image.SCALE_SMOOTH);
             imageLabel.setIcon(new ImageIcon(img));
-            
+
         } catch (Exception e) {
             imageLabel.setText("<html><center>Image Not Found<br>" + sideImagePath + "</center></html>");
             imageLabel.setHorizontalAlignment(SwingConstants.CENTER);
         }
-        
+
         cardPanel.add(imageLabel);
 
         // --- RIGHT SIDE: FORM ---
 
         // Main Title
         JLabel title = new JLabel("Welcome Back!");
-        title.setFont(new Font("Segoe UI", Font.BOLD, 40)); 
+        title.setFont(new Font("Segoe UI", Font.BOLD, 40));
         title.setForeground(ThemeUtils.TEXT);
         title.setBounds(550, 40, 350, 50);
         cardPanel.add(title);
-        
+
         // PROJECT DESCRIPTION
-        JLabel description = new JLabel("<html><p>Water refilling station management system, tracking customer debts and inventory.</p></html>");
+        JLabel description = new JLabel(
+                "<html><p>Water refilling station management system, tracking customer debts and inventory.</p></html>");
         description.setFont(ThemeUtils.BOLD_FONT);
         description.setForeground(Color.DARK_GRAY);
         description.setBounds(550, 95, 350, 40);
         cardPanel.add(description);
-
 
         // Username
         JLabel userLabel = new JLabel("Username");
@@ -78,7 +78,7 @@ public class LoginFrame extends JFrame {
         cardPanel.add(userLabel);
 
         JTextField userField = new JTextField();
-        userField.setBounds(550, 190, 350, 45); 
+        userField.setBounds(550, 190, 350, 45);
         userField.setBorder(BorderFactory.createLineBorder(Color.LIGHT_GRAY));
         cardPanel.add(userField);
 
@@ -97,7 +97,7 @@ public class LoginFrame extends JFrame {
         // Login Button
         JButton loginBtn = new JButton("Log in");
         // Style using custom color directly
-        ThemeUtils.styleButton(loginBtn, new Color(101, 230, 255)); 
+        ThemeUtils.styleButton(loginBtn, new Color(101, 230, 255));
         loginBtn.setBounds(550, 370, 350, 50);
         cardPanel.add(loginBtn);
 
@@ -111,11 +111,14 @@ public class LoginFrame extends JFrame {
         regBtn.setHorizontalAlignment(SwingConstants.LEFT);
         regBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
 
-        regBtn.setBounds(550, 440, 200, 30);
+        regBtn.setBounds(535, 440, 200, 30);
         cardPanel.add(regBtn);
 
         // --- ACTION LISTENERS ---
-        regBtn.addActionListener(e -> new RegisterFrame());
+        regBtn.addActionListener(e -> {
+            new RegisterFrame().setVisible(true);
+            dispose();
+        });
 
         loginBtn.addActionListener(e -> {
             String u = userField.getText();
@@ -160,8 +163,9 @@ public class LoginFrame extends JFrame {
                 UserSession.userId = rs.getInt("customer_id");
                 UserSession.role = "Customer";
                 UserSession.username = rs.getString("name");
-                JOptionPane.showMessageDialog(this,
-                        "Welcome " + UserSession.username + "\nDebt: " + rs.getInt("bottles_owed"));
+
+                new CustomerDashboardFrame().setVisible(true);
+                this.dispose();
             } else {
                 JOptionPane.showMessageDialog(this, "Invalid Login");
             }

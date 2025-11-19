@@ -2,29 +2,68 @@ package utils;
 
 import java.awt.*;
 import javax.swing.*;
-import javax.swing.border.EmptyBorder;
+import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.JTableHeader;
 
+// Utility class for consistent styling across the application.
 public class ThemeUtils {
-    public static final Color PRIMARY = new Color(0, 123, 255); // Blue
-    public static final Color SECONDARY = new Color(108, 117, 125); // Gray
-    public static final Color SUCCESS = new Color(40, 167, 69); // Green
+
+    // Color Palette
+    public static final Color PRIMARY = new Color(0, 150, 200); // A bright, clean aqua blue
+    public static final Color SECONDARY = new Color(255, 100, 100); // A soft contrasting color
+    public static final Color TEXT = new Color(51, 51, 51); // Dark gray for readability
+    public static final Color BACKGROUND = new Color(240, 240, 240); // Light background
     public static final Color DANGER = new Color(220, 53, 69); // Red
-    public static final Color BACKGROUND = new Color(248, 249, 250); // Off-White
 
-    public static final Font HEADER_FONT = new Font("Segoe UI", Font.BOLD, 24);
-    public static final Font BOLD_FONT = new Font("Segoe UI", Font.BOLD, 14);
+    // Fonts
+    public static final Font TITLE_FONT = new Font("Segoe UI", Font.BOLD, 36);
+    public static final Font BOLD_FONT = new Font("Segoe UI", Font.BOLD, 16);
     public static final Font NORMAL_FONT = new Font("Segoe UI", Font.PLAIN, 14);
-    public static final Color TEXT = new Color(33, 37, 41);
-    public static final Color BACKGROUND_BUTTONS = new Color(101, 230, 255); 
 
-    public static void styleButton(JButton btn, Color color) {
-        btn.setBackground(BACKGROUND_BUTTONS);
-        btn.setForeground(Color.BLACK);
-        btn.setFocusPainted(false);
-        btn.setFont(BOLD_FONT);
-        btn.setBorder(new EmptyBorder(10, 20, 10, 20));
-        btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        
+    /**
+     * Applies standard styling to a JButton.
+     * 
+     * @param button  The button to style.
+     * @param bgColor The background color of the button.
+     */
+    public static void styleButton(JButton button, Color bgColor) {
+        button.setBackground(bgColor);
+        button.setForeground(Color.WHITE);
+        button.setFont(BOLD_FONT);
+        button.setFocusPainted(false);
+        button.setBorder(BorderFactory.createEmptyBorder(10, 25, 10, 25));
+        button.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        button.setBorder(BorderFactory.createLineBorder(bgColor.darker(), 1));
+    }
+
+    /**
+     * Applies standard styling to a JTable.
+     * 
+     * @param table The table to style.
+     */
+    public static void styleTable(JTable table) {
+        // Table Header Styling
+        JTableHeader header = table.getTableHeader();
+        header.setFont(BOLD_FONT);
+        header.setBackground(PRIMARY);
+        header.setForeground(Color.WHITE);
+        header.setReorderingAllowed(false);
+        header.setResizingAllowed(true);
+        header.setBorder(null);
+
+        // Table Row Styling
+        table.setFont(NORMAL_FONT);
+        table.setRowHeight(30);
+        table.setSelectionBackground(new Color(200, 230, 255)); // Light blue selection
+        table.setGridColor(new Color(220, 220, 220));
+        table.setShowVerticalLines(false);
+
+        // Center alignment for all cells
+        DefaultTableCellRenderer centerRenderer = new DefaultTableCellRenderer();
+        centerRenderer.setHorizontalAlignment(SwingConstants.CENTER);
+        for (int i = 0; i < table.getColumnCount(); i++) {
+            table.getColumnModel().getColumn(i).setCellRenderer(centerRenderer);
+        }
     }
 
     public static void stylePanel(JPanel panel) {
