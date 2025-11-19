@@ -34,6 +34,7 @@ public class RegisterFrame extends JFrame {
         String[] types = { "Regular", "Reseller" };
         JComboBox<String> typeBox = new JComboBox<>(types);
         typeBox.setBorder(BorderFactory.createTitledBorder("Account Type"));
+        JButton bt2 = new JButton();
 
         JButton btn = new JButton("Create Account");
         ThemeUtils.styleButton(btn, ThemeUtils.SUCCESS);
