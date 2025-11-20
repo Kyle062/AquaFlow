@@ -2,6 +2,7 @@ package utils;
 
 import java.awt.*;
 import javax.swing.*;
+import javax.swing.border.Border; // Required for BorderFactory usage
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.JTableHeader;
 
@@ -15,6 +16,10 @@ public class ThemeUtils {
     public static final Color BACKGROUND = new Color(240, 240, 240); // Light background
     public static final Color DANGER = new Color(220, 53, 69); // Red
 
+    // NEW: Consistent Background for input fields/forms (using BACKGROUND from your
+    // set)
+    public static final Color BG_LIGHT = BACKGROUND;
+
     // Fonts
     public static final Font TITLE_FONT = new Font("Segoe UI", Font.BOLD, 36);
     public static final Font BOLD_FONT = new Font("Segoe UI", Font.BOLD, 16);
@@ -22,8 +27,8 @@ public class ThemeUtils {
 
     /**
      * Applies standard styling to a JButton.
+     * * @param button The button to style.
      * 
-     * @param button  The button to style.
      * @param bgColor The background color of the button.
      */
     public static void styleButton(JButton button, Color bgColor) {
@@ -34,12 +39,22 @@ public class ThemeUtils {
         button.setBorder(BorderFactory.createEmptyBorder(10, 25, 10, 25));
         button.setCursor(new Cursor(Cursor.HAND_CURSOR));
         button.setBorder(BorderFactory.createLineBorder(bgColor.darker(), 1));
+
+        // Add a hover effect for better UX
+        button.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseEntered(java.awt.event.MouseEvent evt) {
+                button.setBackground(bgColor.darker());
+            }
+
+            public void mouseExited(java.awt.event.MouseEvent evt) {
+                button.setBackground(bgColor);
+            }
+        });
     }
 
     /**
      * Applies standard styling to a JTable.
-     * 
-     * @param table The table to style.
+     * * @param table The table to style.
      */
     public static void styleTable(JTable table) {
         // Table Header Styling
@@ -68,5 +83,42 @@ public class ThemeUtils {
 
     public static void stylePanel(JPanel panel) {
         panel.setBackground(BACKGROUND);
+    }
+
+    /**
+     * Creates a styled JTextField with a titled border for clear labeling.
+     */
+    public static JTextField createStyledTextField(String title) {
+        JTextField field = new JTextField();
+        field.setFont(NORMAL_FONT);
+        field.setPreferredSize(new Dimension(300, 50));
+        field.setBackground(Color.WHITE);
+        field.setBorder(createTitledBorder(title));
+        return field;
+    }
+
+    /**
+     * Creates a styled JPasswordField with a titled border for clear labeling.
+     */
+    public static JPasswordField createStyledPasswordField(String title) {
+        JPasswordField field = new JPasswordField();
+        field.setFont(NORMAL_FONT);
+        field.setPreferredSize(new Dimension(300, 50));
+        field.setBackground(Color.WHITE);
+        field.setBorder(createTitledBorder(title));
+        return field;
+    }
+
+    /**
+     * Helper to create a consistent TitledBorder style.
+     */
+    private static Border createTitledBorder(String title) {
+        return BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(new Color(200, 200, 200)), // Using a slightly darker gray line
+                title,
+                0,
+                0,
+                NORMAL_FONT.deriveFont(Font.PLAIN, 12),
+                TEXT);
     }
 }

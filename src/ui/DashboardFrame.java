@@ -11,6 +11,8 @@ import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.sql.*;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 // IMPORTANT: Assuming LoginFrame exists in the 'ui' package
 import ui.LoginFrame; 
@@ -18,17 +20,37 @@ import ui.LoginFrame;
 public class DashboardFrame extends JFrame {
     
     // --- Class Fields for cross-panel access ---
+    private static final Logger LOGGER = Logger.getLogger(DashboardFrame.class.getName());
+
     private DefaultTableModel customerTableModel;
+    private DefaultTableModel userTableModel; // NEW: Table model for system users
     private JComboBox<String> customerComboBox;
+    
+    // NEW: Fields for User Management Tab
+    private JTextField searchUserField;
+    private JTextField usernameField;
+    private JPasswordField passwordField;
+    private JComboBox<String> roleComboBox;
+    private JTable userTable;
+    private JButton updateButton;
+    private JButton deleteButton;
 
     public DashboardFrame() {
-        if ("Customer".equals(UserSession.role)) {
-            JOptionPane.showMessageDialog(this, "Access Denied.");
+        if (!"Admin".equals(UserSession.role)) { // Ensure only Admins access this panel
+             // Handle case where Admin logs out (UserSession.role might be null)
+            if (!"Customer".equals(UserSession.role)) { 
+                JOptionPane.showMessageDialog(this, "Session Invalid or Role Missing. Redirecting to Login.");
+                dispose();
+                new LoginFrame();
+                return;
+            }
+            JOptionPane.showMessageDialog(this, "Access Denied. Only Administrators can use this panel.");
+            dispose();
+            new CustomerDashboardFrame(); // Redirect to the customer view instead of denying access
             return;
         }
 
         setTitle("AquaFlow Pro - Admin Dashboard");
-        // Match the size of the Login/Register frames
         setSize(1400, 800); 
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
@@ -41,9 +63,8 @@ public class DashboardFrame extends JFrame {
         setContentPane(bgPanel);
 
         // --- 2. Central White Card (1000x600) ---
-        JPanel cardPanel = new JPanel(new BorderLayout(20, 20)); // Use BorderLayout for the Tabbed Pane
+        JPanel cardPanel = new JPanel(new BorderLayout(20, 20)); 
         cardPanel.setBackground(Color.WHITE);
-        // Positioned and sized to match Login/Register frame's central card
         cardPanel.setBounds(200, 80, 1000, 600); 
         bgPanel.add(cardPanel);
         
@@ -60,19 +81,14 @@ public class DashboardFrame extends JFrame {
 
         // Logout Button
         JButton logoutButton = new JButton("Logout");
-        // Apply styling for a clear action button, perhaps secondary color
         ThemeUtils.styleButton(logoutButton, ThemeUtils.SECONDARY.darker()); 
         logoutButton.setPreferredSize(new Dimension(100, 35));
         
         logoutButton.addActionListener(e -> {
-            // Logout logic
-            UserSession.userId = -1; // Clear session data
+            UserSession.userId = -1; 
             UserSession.role = null;
-            
-            // Close the current dashboard
+            DatabaseHandler.getInstance().closeConnection(); // Close connection on logout
             dispose();
-            
-            // Open the Login Frame
             new LoginFrame();
         });
         
@@ -84,41 +100,38 @@ public class DashboardFrame extends JFrame {
         JTabbedPane tabs = new JTabbedPane();
         tabs.setFont(ThemeUtils.BOLD_FONT);
         tabs.setOpaque(false); 
-        tabs.setBorder(BorderFactory.createEmptyBorder(0, 20, 20, 20)); // Reduced top padding due to new header
+        tabs.setBorder(BorderFactory.createEmptyBorder(0, 20, 20, 20)); 
 
         tabs.addTab(" New Transaction ", createPOSPanel());
         tabs.addTab(" Manage Customers ", createAdminPanel());
+        tabs.addTab(" Manage System Users ", createUsersPanel()); // NEW TAB
 
         cardPanel.add(tabs, BorderLayout.CENTER);
         
-        // Initial data load for all components
         refreshData(); 
         
         setVisible(true);
     }
 
-    /**
-     * Creates the Point of Sale panel for new transactions.
-     */
+    // =========================================================================
+    // POS and Customer Management (Existing Logic)
+    // =========================================================================
+
     private JPanel createPOSPanel() {
-        JPanel panel = new JPanel(new GridBagLayout()); // Use GridBagLayout for centering
+        JPanel panel = new JPanel(new GridBagLayout()); 
         ThemeUtils.stylePanel(panel);
-        panel.setBackground(Color.WHITE); // Ensure tab content is white
+        panel.setBackground(Color.WHITE); 
         
-        // Inner form panel for structure and padding
-        JPanel form = new JPanel(new GridLayout(4, 1, 10, 20)); // 4 rows for elements
+        JPanel form = new JPanel(new GridLayout(4, 1, 10, 20)); 
         form.setBorder(BorderFactory.createEmptyBorder(40, 40, 40, 40));
         form.setPreferredSize(new Dimension(500, 450));
-        form.setBackground(new Color(245, 245, 245)); // Light gray background for the form area
+        form.setBackground(new Color(245, 245, 245)); 
 
-        // --- Customer ComboBox (Assigned to class field) ---
         customerComboBox = new JComboBox<>();
         customerComboBox.setBorder(BorderFactory.createTitledBorder(
             BorderFactory.createLineBorder(Color.LIGHT_GRAY), 
             "Select Customer", 
-            0, 
-            0, 
-            ThemeUtils.NORMAL_FONT.deriveFont(Font.PLAIN, 12)
+            0, 0, ThemeUtils.NORMAL_FONT.deriveFont(Font.PLAIN, 12)
         ));
         customerComboBox.setBackground(Color.WHITE);
         customerComboBox.setPreferredSize(new Dimension(500, 60));
@@ -127,9 +140,7 @@ public class DashboardFrame extends JFrame {
         qtyField.setBorder(BorderFactory.createTitledBorder(
             BorderFactory.createLineBorder(Color.LIGHT_GRAY), 
             "Gallons (Quantity)", 
-            0, 
-            0, 
-            ThemeUtils.NORMAL_FONT.deriveFont(Font.PLAIN, 12)
+            0, 0, ThemeUtils.NORMAL_FONT.deriveFont(Font.PLAIN, 12)
         ));
         qtyField.setPreferredSize(new Dimension(500, 60));
         
@@ -162,28 +173,24 @@ public class DashboardFrame extends JFrame {
                 processTransaction(id, qty, type, returnBox.isSelected());
                 qtyField.setText("");
                 returnBox.setSelected(false);
-                refreshData(); // Refresh both table and dropdown after a transaction
+                refreshData(); 
             } catch(NumberFormatException ex) { 
                 JOptionPane.showMessageDialog(this, "Invalid quantity entered.", "Input Error", JOptionPane.ERROR_MESSAGE); 
             } catch(Exception ex) { 
+                LOGGER.log(Level.SEVERE, "Transaction Processing Error", ex);
                 JOptionPane.showMessageDialog(this, "An unexpected error occurred during transaction processing.", "Error", JOptionPane.ERROR_MESSAGE); 
             }
         });
         return panel;
     }
 
-    /**
-     * Creates the Admin panel for managing customers.
-     */
     private JPanel createAdminPanel() {
         JPanel panel = new JPanel(new BorderLayout());
         panel.setBackground(Color.WHITE);
 
-        // --- Table Setup (Assigned to class field) ---
         customerTableModel = new DefaultTableModel(new String[]{"ID", "Name", "Bottles Owed", "Username", "Type"}, 0);
         JTable table = new JTable(customerTableModel);
         
-        // Styling the table and scroll pane
         table.setFont(ThemeUtils.NORMAL_FONT);
         table.getTableHeader().setFont(ThemeUtils.BOLD_FONT);
         table.setRowHeight(25);
@@ -191,7 +198,6 @@ public class DashboardFrame extends JFrame {
         JScrollPane scrollPane = new JScrollPane(table);
         scrollPane.setBorder(BorderFactory.createEmptyBorder()); 
         
-        // Button Panel - Styled
         JPanel btns = new JPanel(new FlowLayout(FlowLayout.CENTER, 20, 15));
         btns.setBackground(new Color(240, 240, 240));
         
@@ -206,7 +212,7 @@ public class DashboardFrame extends JFrame {
         panel.add(scrollPane, BorderLayout.CENTER);
         panel.add(btns, BorderLayout.SOUTH);
 
-        refresh.addActionListener(e -> refreshData()); // Call unified refresh
+        refresh.addActionListener(e -> refreshData()); 
         delete.addActionListener(e -> {
             int row = table.getSelectedRow();
             if (row != -1) {
@@ -218,7 +224,7 @@ public class DashboardFrame extends JFrame {
                 
                 if (confirm == JOptionPane.YES_OPTION) {
                     deleteCustomer(id);
-                    refreshData(); // Refresh all components after deletion
+                    refreshData(); 
                 }
             } else {
                 JOptionPane.showMessageDialog(this, "Please select a customer to delete.", "Warning", JOptionPane.WARNING_MESSAGE);
@@ -227,21 +233,15 @@ public class DashboardFrame extends JFrame {
 
         return panel;
     }
-    
-    /**
-     * Unified method to refresh all customer-related data components on the dashboard.
-     */
+
     private void refreshData() {
-        refreshTable();
-        loadCustomers();
+        refreshCustomerTable();
+        loadCustomersForComboBox();
+        refreshUserTable(null); // Load all users initially
     }
-
-    // --- Logic Helpers ---
-
-    /**
-     * Loads customer data into the JComboBox field.
-     */
-    private void loadCustomers() {
+    
+    // Updated helper name
+    private void loadCustomersForComboBox() {
         if (customerComboBox == null) return;
         customerComboBox.removeAllItems();
         try (
@@ -253,14 +253,12 @@ public class DashboardFrame extends JFrame {
                 customerComboBox.addItem(rs.getInt(1) + " - " + rs.getString(2) + " (" + rs.getString(3) + ")");
             }
         } catch(Exception e) { 
-            System.err.println("Error loading customers into ComboBox: " + e.getMessage());
+            LOGGER.log(Level.SEVERE, "Error loading customers into ComboBox.", e);
         }
     }
 
-    /**
-     * Loads customer data into the DefaultTableModel field.
-     */
-    private void refreshTable() {
+    // Updated helper name
+    private void refreshCustomerTable() {
         if (customerTableModel == null) return;
         customerTableModel.setRowCount(0);
         try (
@@ -268,55 +266,385 @@ public class DashboardFrame extends JFrame {
             Statement stmt = conn.createStatement();
             ResultSet rs = stmt.executeQuery("SELECT customer_id, name, bottles_owed, username, type FROM customers")
         ) {
-            // Columns: (1)ID, (2)Name, (3)Bottles_Owed, (4)Username, (5)Type
             while(rs.next()) {
                 customerTableModel.addRow(new Object[]{rs.getInt(1), rs.getString(2), rs.getInt(3), rs.getString(4), rs.getString(5)});
             }
         } catch(Exception e) { 
-             System.err.println("Error refreshing customer table: " + e.getMessage());
+             LOGGER.log(Level.SEVERE, "Error refreshing customer table.", e);
         }
     }
 
     private void processTransaction(int id, int qty, String type, boolean isReturn) throws SQLException {
         Connection conn = DatabaseHandler.getInstance().getConnection();
-        if (isReturn) {
-            PreparedStatement getDebt = conn.prepareStatement("SELECT bottles_owed FROM customers WHERE customer_id=?");
-            getDebt.setInt(1, id);
-            ResultSet rs = getDebt.executeQuery();
-            if (rs.next()) {
-                int currentDebt = rs.getInt("bottles_owed");
+        conn.setAutoCommit(false); // Start transaction
+        try {
+            if (isReturn) {
+                PreparedStatement getDebt = conn.prepareStatement("SELECT bottles_owed FROM customers WHERE customer_id=?");
+                getDebt.setInt(1, id);
+                ResultSet rs = getDebt.executeQuery();
+                int currentDebt = 0;
+                if (rs.next()) {
+                    currentDebt = rs.getInt("bottles_owed");
+                }
+                rs.close();
+                getDebt.close();
+
                 if (currentDebt < qty) {
                     JOptionPane.showMessageDialog(this, "Customer is returning more bottles than owed (" + currentDebt + ").", "Error", JOptionPane.ERROR_MESSAGE);
+                    conn.rollback();
                     return;
                 }
+                
+                String updateSql = "UPDATE customers SET bottles_owed = bottles_owed - ? WHERE customer_id=?";
+                PreparedStatement updateDebt = conn.prepareStatement(updateSql);
+                updateDebt.setInt(1, qty);
+                updateDebt.setInt(2, id);
+                updateDebt.executeUpdate();
+                updateDebt.close();
+                
+                JOptionPane.showMessageDialog(this, "Successfully processed " + qty + " bottles returned (Debt reduced).");
+            } else {
+                Customer c = type.equals("Reseller") ? new Reseller("x") : new RegularCustomer("x");
+                double price = c.calculateTotal(qty);
+                
+                String insertTxnSql = "INSERT INTO transactions (customer_id, user_id, gallons, amount, transaction_date) VALUES (?,?,?,?, NOW())";
+                PreparedStatement ps = conn.prepareStatement(insertTxnSql);
+                ps.setInt(1, id); 
+                ps.setInt(2, UserSession.userId); // Admin/Manager ID performing the sale
+                ps.setInt(3, qty); 
+                ps.setDouble(4, price);
+                ps.executeUpdate();
+                ps.close();
+                
+                String updateDebtSql = "UPDATE customers SET bottles_owed = bottles_owed + ? WHERE customer_id=?";
+                PreparedStatement updateDebt = conn.prepareStatement(updateDebtSql);
+                updateDebt.setInt(1, qty);
+                updateDebt.setInt(2, id);
+                updateDebt.executeUpdate();
+                updateDebt.close();
+                
+                JOptionPane.showMessageDialog(this, "Sale Processed! Total cost: P " + String.format("%.2f", price) + ".\n" + qty + " bottles added to debt.");
             }
-            conn.createStatement().executeUpdate("UPDATE customers SET bottles_owed = bottles_owed - " + qty + " WHERE customer_id=" + id);
-            JOptionPane.showMessageDialog(this, "Successfully processed " + qty + " bottles returned (Debt reduced).");
-        } else {
-            // Instantiate the correct model type
-            Customer c = type.equals("Reseller") ? new Reseller("x") : new RegularCustomer("x");
-            double price = c.calculateTotal(qty);
-            
-            PreparedStatement ps = conn.prepareStatement("INSERT INTO transactions (customer_id, user_id, gallons, amount) VALUES (?,?,?,?)");
-            ps.setInt(1, id); ps.setInt(2, UserSession.userId); ps.setInt(3, qty); ps.setDouble(4, price);
-            ps.executeUpdate();
-            
-            conn.createStatement().executeUpdate("UPDATE customers SET bottles_owed = bottles_owed + " + qty + " WHERE customer_id=" + id);
-            JOptionPane.showMessageDialog(this, "Sale Processed! Total cost: P " + String.format("%.2f", price) + ".\n" + qty + " bottles added to debt.");
+            conn.commit(); // Commit transaction
+        } catch (SQLException e) {
+            conn.rollback(); // Rollback on error
+            throw e; // Re-throw to be caught by the ActionListener
+        } finally {
+            conn.setAutoCommit(true); // Restore default
         }
     }
 
-    // This method handles the database deletion only
     private void deleteCustomer(int id) {
-        try {
-            DatabaseHandler.getInstance().getConnection().createStatement()
-                    .executeUpdate("DELETE FROM customers WHERE customer_id=" + id);
-            JOptionPane.showMessageDialog(this, "Customer ID " + id + " successfully deleted.");
+        // NOTE: In a production system, deleting a customer should also delete related records 
+        // (e.g., transactions) or be blocked if such records exist.
+        try (Connection conn = DatabaseHandler.getInstance().getConnection()) {
+            // Delete customer's transactions first to satisfy foreign key constraints
+            PreparedStatement deleteTxn = conn.prepareStatement("DELETE FROM transactions WHERE customer_id = ?");
+            deleteTxn.setInt(1, id);
+            deleteTxn.executeUpdate();
+            
+            // Delete the customer
+            PreparedStatement deleteCust = conn.prepareStatement("DELETE FROM customers WHERE customer_id = ?");
+            deleteCust.setInt(1, id);
+            deleteCust.executeUpdate();
+            
+            JOptionPane.showMessageDialog(this, "Customer ID " + id + " and all related transactions successfully deleted.");
             
         } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Error deleting customer ID: " + id, e);
             JOptionPane.showMessageDialog(this, "Error deleting customer: " + e.getMessage(), "Database Error",
                     JOptionPane.ERROR_MESSAGE);
-            e.printStackTrace();
+        }
+    }
+    
+    // =========================================================================
+    // NEW: User Management Panel (System Users: Admin, Driver, etc.)
+    // =========================================================================
+
+    private JPanel createUsersPanel() {
+        JPanel panel = new JPanel(new BorderLayout(10, 10));
+        panel.setBackground(Color.WHITE);
+
+        // --- Left: User Management Form (CRUD) ---
+        JPanel formPanel = new JPanel();
+        formPanel.setLayout(new BoxLayout(formPanel, BoxLayout.Y_AXIS));
+        formPanel.setBorder(BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(ThemeUtils.PRIMARY.darker()), 
+                "User Details", 
+                0, 0, ThemeUtils.BOLD_FONT.deriveFont(Font.BOLD, 16), ThemeUtils.TEXT));
+        formPanel.setBackground(new Color(245, 245, 245));
+        formPanel.setPreferredSize(new Dimension(350, 600)); // Fixed width for form
+
+        // Initialize fields
+        usernameField = ThemeUtils.createStyledTextField("Username");
+        passwordField = ThemeUtils.createStyledPasswordField("Password (Set New)");
+        roleComboBox = new JComboBox<>(new String[]{"Admin", "Manager", "Driver"});
+        roleComboBox.setBorder(BorderFactory.createTitledBorder("Role"));
+        roleComboBox.setFont(ThemeUtils.NORMAL_FONT);
+        roleComboBox.setBackground(Color.WHITE);
+
+        JButton addButton = new JButton("Add New User");
+        updateButton = new JButton("Update Selected User");
+        deleteButton = new JButton("Delete Selected User");
+
+        ThemeUtils.styleButton(addButton, ThemeUtils.PRIMARY);
+        ThemeUtils.styleButton(updateButton, ThemeUtils.SECONDARY);
+        ThemeUtils.styleButton(deleteButton, ThemeUtils.DANGER);
+        
+        // Initially disable update/delete until a user is selected
+        updateButton.setEnabled(false);
+        deleteButton.setEnabled(false);
+
+        // Add padding around components
+        formPanel.add(Box.createVerticalStrut(20));
+        formPanel.add(usernameField);
+        formPanel.add(Box.createVerticalStrut(10));
+        formPanel.add(passwordField);
+        formPanel.add(Box.createVerticalStrut(10));
+        formPanel.add(roleComboBox);
+        formPanel.add(Box.createVerticalStrut(30));
+        formPanel.add(addButton);
+        formPanel.add(Box.createVerticalStrut(10));
+        formPanel.add(updateButton);
+        formPanel.add(Box.createVerticalStrut(10));
+        formPanel.add(deleteButton);
+        formPanel.add(Box.createVerticalGlue()); 
+        
+        panel.add(formPanel, BorderLayout.WEST);
+
+        // --- Center: User List Table and Search ---
+        JPanel tablePanel = new JPanel(new BorderLayout(10, 10));
+        tablePanel.setBackground(Color.WHITE);
+
+        // Search Panel
+        JPanel searchPanel = new JPanel(new BorderLayout(10, 5));
+        searchPanel.setBorder(BorderFactory.createEmptyBorder(0, 0, 5, 0));
+        searchPanel.setBackground(Color.WHITE);
+        searchUserField = new JTextField(20);
+        searchUserField.setFont(ThemeUtils.NORMAL_FONT);
+        JButton searchButton = new JButton("Search");
+        ThemeUtils.styleButton(searchButton, new Color(220, 220, 220)); 
+        
+        searchPanel.add(new JLabel(" Filter by Username or Role: "), BorderLayout.WEST);
+        searchPanel.add(searchUserField, BorderLayout.CENTER);
+        searchPanel.add(searchButton, BorderLayout.EAST);
+        
+        tablePanel.add(searchPanel, BorderLayout.NORTH);
+
+        // Table Setup
+        userTableModel = new DefaultTableModel(new String[]{"ID", "Username", "Role"}, 0);
+        userTable = new JTable(userTableModel);
+        userTable.setFont(ThemeUtils.NORMAL_FONT);
+        userTable.getTableHeader().setFont(ThemeUtils.BOLD_FONT);
+        userTable.setRowHeight(25);
+        
+        JScrollPane userScrollPane = new JScrollPane(userTable);
+        tablePanel.add(userScrollPane, BorderLayout.CENTER);
+
+        panel.add(tablePanel, BorderLayout.CENTER);
+        
+        // --- Action Listeners ---
+        
+        // Row Selection Listener (Populate form and enable buttons)
+        userTable.getSelectionModel().addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting() && userTable.getSelectedRow() != -1) {
+                int selectedRow = userTable.getSelectedRow();
+                String username = (String) userTableModel.getValueAt(selectedRow, 1);
+                String role = (String) userTableModel.getValueAt(selectedRow, 2);
+                
+                usernameField.setText(username);
+                // NOTE: Password field is intentionally cleared for security; user must re-enter to update
+                passwordField.setText(""); 
+                roleComboBox.setSelectedItem(role);
+                
+                updateButton.setEnabled(true);
+                deleteButton.setEnabled(true);
+            } else if (userTable.getSelectedRow() == -1) {
+                // Clear selection state
+                usernameField.setText("");
+                passwordField.setText("");
+                updateButton.setEnabled(false);
+                deleteButton.setEnabled(false);
+            }
+        });
+        
+        addButton.addActionListener(e -> addUser());
+        updateButton.addActionListener(e -> updateUser());
+        deleteButton.addActionListener(e -> deleteUser());
+        searchButton.addActionListener(e -> refreshUserTable(searchUserField.getText()));
+
+        return panel;
+    }
+    
+    /**
+     * Loads/refreshes user data (Admin, Manager, Driver) into the user table.
+     * @param filterText Optional search filter (username or role). If null, loads all.
+     */
+    private void refreshUserTable(String filterText) {
+        if (userTableModel == null) return;
+        userTableModel.setRowCount(0);
+        String sql = "SELECT user_id, username, role FROM users";
+        
+        if (filterText != null && !filterText.trim().isEmpty()) {
+            sql += " WHERE username LIKE ? OR role LIKE ?";
+        }
+        
+        try (
+            Connection conn = DatabaseHandler.getInstance().getConnection();
+            PreparedStatement ps = conn.prepareStatement(sql)
+        ) {
+            if (filterText != null && !filterText.trim().isEmpty()) {
+                String pattern = "%" + filterText.trim() + "%";
+                ps.setString(1, pattern);
+                ps.setString(2, pattern);
+            }
+            
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    userTableModel.addRow(new Object[]{rs.getInt("user_id"), rs.getString("username"), rs.getString("role")});
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Error refreshing user table.", e);
+        }
+    }
+    
+    /**
+     * Adds a new system user to the 'users' table.
+     */
+    private void addUser() {
+        String username = usernameField.getText().trim();
+        String password = new String(passwordField.getPassword());
+        String role = (String) roleComboBox.getSelectedItem();
+
+        if (username.isEmpty() || password.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Username and Password cannot be empty.", "Input Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        // NOTE: In a real app, the password MUST be hashed before storage.
+        String sql = "INSERT INTO users (username, password, role) VALUES (?, ?, ?)";
+
+        try (Connection conn = DatabaseHandler.getInstance().getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setString(1, username);
+            ps.setString(2, password); // Placeholder: Use Hashing in production!
+            ps.setString(3, role);
+            
+            ps.executeUpdate();
+            
+            JOptionPane.showMessageDialog(this, "User '" + username + "' added successfully as " + role + ".");
+            // Clear fields and refresh table
+            usernameField.setText("");
+            passwordField.setText("");
+            refreshUserTable(null);
+
+        } catch (SQLException e) {
+            // Check for duplicate key error (MySQL error code 1062)
+            if (e.getErrorCode() == 1062) {
+                JOptionPane.showMessageDialog(this, "Error: Username '" + username + "' already exists.", "Database Error", JOptionPane.ERROR_MESSAGE);
+            } else {
+                LOGGER.log(Level.SEVERE, "Error adding user.", e);
+                JOptionPane.showMessageDialog(this, "Database error: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }
+    
+    /**
+     * Updates the username, password, and/or role of the currently selected system user.
+     */
+    private void updateUser() {
+        int selectedRow = userTable.getSelectedRow();
+        if (selectedRow == -1) return; // Should be impossible if button is enabled
+        
+        int userId = (int) userTableModel.getValueAt(selectedRow, 0);
+        String newUsername = usernameField.getText().trim();
+        String newPassword = new String(passwordField.getPassword());
+        String newRole = (String) roleComboBox.getSelectedItem();
+
+        if (newUsername.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Username cannot be empty.", "Input Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        // Build SQL dynamically based on whether password was changed
+        String sql;
+        if (newPassword.isEmpty()) {
+            // Update only username and role
+            sql = "UPDATE users SET username = ?, role = ? WHERE user_id = ?";
+        } else {
+            // Update username, password, and role
+            // NOTE: Placeholder: Use Hashing in production!
+            sql = "UPDATE users SET username = ?, password = ?, role = ? WHERE user_id = ?";
+        }
+
+        try (Connection conn = DatabaseHandler.getInstance().getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setString(1, newUsername);
+
+            int paramIndex = 2;
+            if (!newPassword.isEmpty()) {
+                ps.setString(paramIndex++, newPassword);
+            }
+            
+            ps.setString(paramIndex++, newRole);
+            ps.setInt(paramIndex, userId);
+            
+            int rowsAffected = ps.executeUpdate();
+
+            if (rowsAffected > 0) {
+                JOptionPane.showMessageDialog(this, "User ID " + userId + " updated successfully.");
+                // Clear fields and refresh table
+                usernameField.setText("");
+                passwordField.setText("");
+                refreshUserTable(null);
+            } else {
+                JOptionPane.showMessageDialog(this, "User ID " + userId + " not found or no changes made.", "Warning", JOptionPane.WARNING_MESSAGE);
+            }
+
+        } catch (SQLException e) {
+            LOGGER.log(Level.SEVERE, "Error updating user ID: " + userId, e);
+            JOptionPane.showMessageDialog(this, "Database error: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+    
+    /**
+     * Deletes the currently selected system user from the 'users' table.
+     */
+    private void deleteUser() {
+        int selectedRow = userTable.getSelectedRow();
+        if (selectedRow == -1) return; // Should be impossible if button is enabled
+        
+        int userId = (int) userTableModel.getValueAt(selectedRow, 0);
+        String username = (String) userTableModel.getValueAt(selectedRow, 1);
+        
+        int confirm = JOptionPane.showConfirmDialog(this, 
+            "Are you sure you want to delete system user '" + username + "' (ID: " + userId + ")? This cannot be undone.", 
+            "Confirm System User Deletion", 
+            JOptionPane.YES_NO_OPTION);
+        
+        if (confirm == JOptionPane.YES_OPTION) {
+            String sql = "DELETE FROM users WHERE user_id = ?";
+
+            try (Connection conn = DatabaseHandler.getInstance().getConnection();
+                 PreparedStatement ps = conn.prepareStatement(sql)) {
+
+                ps.setInt(1, userId);
+                int rowsAffected = ps.executeUpdate();
+
+                if (rowsAffected > 0) {
+                    JOptionPane.showMessageDialog(this, "System User '" + username + "' deleted successfully.");
+                    refreshUserTable(null); // Refresh table
+                } else {
+                    JOptionPane.showMessageDialog(this, "System User ID " + userId + " not found.", "Warning", JOptionPane.WARNING_MESSAGE);
+                }
+
+            } catch (SQLException e) {
+                LOGGER.log(Level.SEVERE, "Error deleting user ID: " + userId, e);
+                JOptionPane.showMessageDialog(this, "Database error: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            }
         }
     }
 }
